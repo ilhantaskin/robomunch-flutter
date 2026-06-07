@@ -26,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Uint8List? _imageBytes;
   String _artStatus = '';
   bool _isPainting = false;
+  bool _isColorizing = false;
 
   // Chat Studio
   final _chatCtrl = TextEditingController();
@@ -42,7 +43,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Listen for speech results from native Android
     _speechChannel.setMethodCallHandler((call) async {
       if (call.method == 'onSpeechResult') {
         final text = call.arguments as String? ?? '';
@@ -99,6 +99,36 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _artStatus = 'Error: $e');
     } finally {
       setState(() => _isPainting = false);
+    }
+  }
+
+  Future<void> _colorize() async {
+    if (_imageBytes == null) return;
+    setState(() {
+      _isColorizing = true;
+      _artStatus = 'Colorizing...';
+    });
+    try {
+      final imageB64 = base64Encode(_imageBytes!);
+      final result = await ApiService.colorize(imageB64);
+
+      // Show resolution info if available
+      if (result.containsKey('resolution')) {
+        setState(() {
+          _artStatus = 'Resolution: ${result['resolution']}';
+        });
+      }
+      // Show grayscale image if available
+      if (result.containsKey('image')) {
+        setState(() {
+          _imageBytes = base64Decode(result['image'] as String);
+          _artStatus = '✨ Grayscale done!';
+        });
+      }
+    } catch (e) {
+      setState(() => _artStatus = 'Colorize error: $e');
+    } finally {
+      setState(() => _isColorizing = false);
     }
   }
 
@@ -233,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: kInputBorder),
             ),
-            child: _isPainting
+            child: _isPainting || _isColorizing
                 ? const Center(child: CircularProgressIndicator(color: kAccent))
                 : _imageBytes != null
                     ? ClipRRect(
@@ -272,6 +302,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 _circleButton(icon: Icons.palette, onTap: _isPainting ? null : _generateImage),
               ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // COLORIZE BUTTON
+          GestureDetector(
+            onTap: (_imageBytes != null && !_isColorizing) ? _colorize : null,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: _imageBytes != null ? kAccentDark : kInputBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: kInputBorder),
+              ),
+              child: Text(
+                'colorize',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: _imageBytes != null ? kTextLight : kTextMuted,
+                  letterSpacing: 2,
+                  fontSize: 13,
+                ),
+              ),
             ),
           ),
           if (_artStatus.isNotEmpty)
